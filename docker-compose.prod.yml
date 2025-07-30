@@ -1,0 +1,145 @@
+version: "3.8"
+
+services:
+  odoo:
+    build:
+      context: ./
+      dockerfile: ./odoo/Dockerfile
+      args:
+        - ODOO_TAG
+        - ODOO_RC
+        - ROOT_PATH
+        - ENTERPRISE_USER
+        - ENTERPRISE_ACCESS_TOKEN
+        - ENTERPRISE_ADDONS
+        - GITHUB_USER
+        - GITHUB_ACCESS_TOKEN
+        - THIRD_PARTY_ADDONS
+        - LOG_PATH
+        - USE_REDIS
+        - USE_S3
+        - USE_SENTRY
+    tty: true
+    volumes:
+      - odoo-data:/var/lib/odoo
+      - ./odoo/extra-addons:/mnt/extra-addons
+      - ./odoo/custom-addons:/mnt/custom-addons
+      - ./odoo/entrypoint.sh:/entrypoint.sh
+    environment:
+      - HOST=${DB_HOST}
+      - PORT=${DB_PORT}
+      - USER=${DB_USER}
+      - PASSWORD=${DB_PASSWORD}
+      - ODOO_TAG
+      - ODOO_RC
+      - USE_REDIS
+      - USE_S3
+      - USE_SENTRY
+      - THIRD_PARTY_ADDONS
+      - ODOO_SESSION_REDIS
+      - ODOO_SESSION_REDIS_HOST
+      - ODOO_SESSION_REDIS_PORT
+      - ODOO_SESSION_REDIS_PASSWORD
+      - ODOO_SESSION_REDIS_URL
+      - ODOO_SESSION_REDIS_PREFIX
+      - ODOO_SESSION_REDIS_SENTINEL_MASTER_NAME
+      - ODOO_SESSION_REDIS_SENTINEL_HOST
+      - ODOO_SESSION_REDIS_SENTINEL_PORT
+      - ODOO_SESSION_REDIS_EXPIRATION
+      - ODOO_SESSION_REDIS_EXPIRATION_ANONYMOUS
+      - AWS_HOST
+      - AWS_REGION
+      - AWS_ACCESS_KEY_ID
+      - AWS_SECRET_ACCESS_KEY
+      - AWS_BUCKETNAME
+    ports:
+      - "8069:8069" # Odoo default port
+    networks:
+      - internal
+    profiles: ["prod"]
+
+  postgres:
+    build:
+      context: ./
+      dockerfile: ./postgres/Dockerfile
+      args:
+        - POSTGRES_TAG
+    tty: true
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+      - ./postgres/entrypoint.sh:/docker-entrypoint-initdb.d/entrypoint.sh
+    environment:
+      - POSTGRES_DB
+      - POSTGRES_USER
+      - POSTGRES_PASSWORD
+      - PGDATA
+      - DB_USER
+      - DB_TEMPLATE
+      - UNACCENT_TEMPLATE
+      - PGADMING_DB_NAME
+      - PGADMING_DB_USER
+      - PGADMIN_DB_PASSWORD
+    ports:
+      - "5432:5432" # Postgres default port
+    networks:
+      - internal
+    profiles: ["prod"]
+
+  redis:
+    image: eqalpha/keydb:${KEYDB_TAG}
+    platform: linux/amd64
+    ports:
+      - "6379:6379" # Redis/KeyDB default port
+    volumes:
+      - redis-data:/data
+    networks:
+      - internal
+    profiles: ["prod"]
+
+  s3:
+    image: minio/minio:${MINIO_TAG}
+    environment:
+      - MINIO_ROOT_USER
+      - MINIO_ROOT_PASSWORD
+      - MINIO_BROWSER_REDIRECT_URL
+    command: server ${MINIO_DATA} --console-address ":${MINIO_CONSOLE_PORT}"
+    volumes:
+      - s3-data:/data
+    ports:
+      - "9000:9000" # MinIO API
+      - "9001:9001" # MinIO Console
+    networks:
+      - internal
+    profiles: ["prod"]
+
+  pgadmin:
+    build:
+      context: ./
+      dockerfile: ./pgadmin/Dockerfile
+      args:
+        - PGADMIN_TAG
+    depends_on:
+      - postgres
+    expose:
+      - 80
+    ports:
+      - "5050:80" # Expose pgAdmin on port 5050
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+    environment:
+      - PGADMIN_DEFAULT_EMAIL
+      - PGADMIN_DEFAULT_PASSWORD
+    networks:
+      - internal
+    profiles: ["prod"]
+
+volumes:
+  odoo-data:
+  pg-data:
+  redis-data:
+  s3-data:
+  pgadmin-data:
+
+networks:
+  internal:
+    driver: bridge
